@@ -3,117 +3,127 @@ Retriever setup and vector store configuration.
 """
 
 import os
+import threading
 
 from langchain_core.documents import Document
 from langchain_core.tools import create_retriever_tool
-from langchain_openai import OpenAIEmbeddings
-# from langchain_qdrant import QdrantVectorStore
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document as LangChainDocument
 
-from src.core.config import settings
+from src.memory.chathistory_sqlite import DocumentManager
 
-embeddings = OpenAIEmbeddings()
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Global variable to store the FAISS vectorstore instance
-# This ensures get_retriever() can access documents stored by retriever_chain()
-_faiss_vectorstore = None
+FAISS_INDEX_DIR = "faiss_index_persistent"
 
+# Global in-memory vectorstore and lock
+_global_vectorstore = None
+_vectorstore_lock = threading.Lock()
 
-def retriever_chain(chunks: list[Document]):
-    """
-    Initialize and store documents in FAISS vector database.
-
-    Args:
-        chunks: List of document chunks to store.
-
-    Returns:
-        Boolean indicating success of the operation.
-    """
-    global _faiss_vectorstore
-
+def _get_or_create_vectorstore():
+    global _global_vectorstore
+    
+    with _vectorstore_lock:
+        if _global_vectorstore is not None:
+            return _global_vectorstore
+        
     try:
-        # Commenting out Qdrant code for temporary FAISS usage
-        # vectorstore = QdrantVectorStore.from_documents(
-        #     documents=chunks,
-        #     embedding=embeddings,
-        #     url=settings.QDRANT_URL,
-        #     api_key=settings.QDRANT_API_KEY,
-        #     collection_name=settings.CODE_COLLECTION,
-        # )
-        vectorstore = FAISS.from_documents(
-            documents=chunks,
-            embedding=embeddings
-        )
-
-        # Store the vectorstore globally so get_retriever() can access it
-        _faiss_vectorstore = vectorstore
-
-        print("FAISS vector store initialized with documents")
-        print(f"Vectorstore contains {len(chunks)} document chunks")
-        return True
-    except Exception as e:
-        print(f"Error storing documents in FAISS: {e}")
-        return False
-
-
-def get_retriever():
-    """
-    Get a retriever tool connected to the FAISS vector store.
-
-    Returns the retriever tool that can search documents stored by retriever_chain().
-    If no documents have been uploaded yet, creates a retriever with a dummy document.
-
-    Returns:
-        A LangChain retriever tool configured for the vector store.
-
-    Raises:
-        Exception: If vector store initialization fails.
-    """
-    global _faiss_vectorstore
-
-    try:
-        # Commenting out Qdrant code for temporary FAISS usage
-        # vectorstore = QdrantVectorStore.from_documents(
-        #     documents=[],
-        #     embedding=embeddings,
-        #     url=settings.QDRANT_URL,
-        #     api_key=settings.QDRANT_API_KEY,
-        #     collection_name=settings.CODE_COLLECTION,
-        # )
-        # retriever = vectorstore.as_retriever()
-
-        # Use the global vectorstore if it exists (documents have been uploaded)
-        if _faiss_vectorstore is not None:
-            retriever = _faiss_vectorstore.as_retriever()
-            print("Using existing FAISS vectorstore with uploaded documents")
+        if os.path.exists(FAISS_INDEX_DIR):
+            _global_vectorstore = FAISS.load_local(
+                FAISS_INDEX_DIR, 
+                embeddings, 
+                allow_dangerous_deserialization=True
+            )
+            print("Loaded persistent FAISS vectorstore")
         else:
-            # No documents uploaded yet, create dummy for initialization
-            print("No documents uploaded yet, creating dummy vectorstore")
-            from langchain_core.documents import Document as LangChainDocument
-
+            print("No persistent documents found, creating dummy vectorstore")
             dummy_doc = LangChainDocument(
                 page_content="No documents have been uploaded yet. Please upload a document first.",
                 metadata={"source": "initialization"}
             )
-
-            _faiss_vectorstore = FAISS.from_documents(
+            _global_vectorstore = FAISS.from_documents(
                 documents=[dummy_doc],
                 embedding=embeddings
             )
-            retriever = _faiss_vectorstore.as_retriever()
+    except Exception as e:
+        print(f"Error loading FAISS vectorstore: {e}")
+        dummy_doc = LangChainDocument(
+            page_content="Error loading documents.",
+            metadata={"source": "error"}
+        )
+        _global_vectorstore = FAISS.from_documents([dummy_doc], embedding=embeddings)
+        
+    return _global_vectorstore
 
-        # Load document description
-        if os.path.exists("description.txt"):
-            with open("description.txt", "r", encoding="utf-8") as f:
-                description = f.read()
-        else:
-            description = None
+def retriever_chain(chunks: list[Document]):
+    """
+    Initialize and store documents in a persistent FAISS vector database.
+    """
+    global _global_vectorstore
+    try:
+        new_vectorstore = FAISS.from_documents(
+            documents=chunks,
+            embedding=embeddings
+        )
+
+        vectorstore = _get_or_create_vectorstore()
+        
+        with _vectorstore_lock:
+            # If it was a dummy, we can't easily "remove" the dummy, but we can just merge.
+            # It's better to just merge.
+            vectorstore.merge_from(new_vectorstore)
+            vectorstore.save_local(FAISS_INDEX_DIR)
+            
+            print("FAISS vector store saved to disk with new documents")
+            return True
+    except Exception as e:
+        print(f"Error storing documents in FAISS: {e}")
+        return False
+
+def remove_document_from_faiss(filename: str):
+    """
+    Remove all chunks from FAISS matching a filename.
+    """
+    global _global_vectorstore
+    try:
+        vectorstore = _get_or_create_vectorstore()
+        
+        # Find all doc IDs that match the filename
+        ids_to_delete = []
+        for doc_id, doc in vectorstore.docstore._dict.items():
+            if doc.metadata.get("filename") == filename:
+                ids_to_delete.append(doc_id)
+                
+        if ids_to_delete:
+            with _vectorstore_lock:
+                vectorstore.delete(ids_to_delete)
+                vectorstore.save_local(FAISS_INDEX_DIR)
+            print(f"Deleted {len(ids_to_delete)} chunks from FAISS for {filename}")
+            return True
+        return False
+    except Exception as e:
+        print(f"Error removing from FAISS: {e}")
+        return False
+
+def get_retriever():
+    """
+    Get a retriever tool connected to the persistent FAISS vector store.
+    """
+    try:
+        vectorstore = _get_or_create_vectorstore()
+        retriever = vectorstore.as_retriever()
+
+        from langchain_core.prompts import PromptTemplate
+        document_prompt = PromptTemplate.from_template(
+            "[Source: {filename}, Page: {page}]\n{page_content}"
+        )
 
         retriever_tool = create_retriever_tool(
             retriever,
-            "retriever_customer_uploaded_documents",
-            f"Use this tool **only** to answer questions about: {description}\n"
-            "Don't use this tool to answer anything else."
+            "retriever",
+            "Search and retrieve information from the user's uploaded documents. Use this tool whenever the user asks a question about their uploaded files.",
+            document_prompt=document_prompt
         )
 
         return retriever_tool

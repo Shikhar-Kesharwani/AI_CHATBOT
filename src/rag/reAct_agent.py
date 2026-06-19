@@ -4,8 +4,8 @@ ReAct agent setup for document retrieval and question answering.
 
 import os
 
-from langchain.agents import create_react_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from src.config.settings import Config
 from src.llms.openai import llm
@@ -23,20 +23,20 @@ if os.path.exists("description.txt"):
 else:
     description = None
 
-# Create ReAct agent prompt
+# Create Tool Calling agent prompt
 prompt = ChatPromptTemplate.from_messages([
     ("system", config.prompt("system_prompt")),
     ("human", "{input}"),
-    ("ai", "{agent_scratchpad}")
+    MessagesPlaceholder(variable_name="agent_scratchpad"),
 ])
 
-# Initialize the ReAct agent and executor
-react_agent = create_react_agent(llm, tools, prompt)
+# Initialize the Tool Calling agent and executor
+react_agent = create_tool_calling_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(
     agent=react_agent,
     tools=tools,
     handle_parsing_errors=True,
-    max_iterations=2,
+    max_iterations=10,
     verbose=True,
     return_intermediate_steps=True
 )

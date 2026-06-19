@@ -1,2 +1,16 @@
 venv/
 .env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+adaptive_rag.db
+faiss_index_persistent/
+app.log
+.idea/
+.streamlit/secrets.toml
+.DS_Store
+description.txt

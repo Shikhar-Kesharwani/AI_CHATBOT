@@ -15,7 +15,7 @@ from src.llms.openai import llm
 from src.models.grade import Grade
 from src.models.route_identifier import RouteIdentifier
 from src.models.state import State
-from src.tools.graph_tools import routing_tool, doc_tool
+from src.tools.graph_tools import routing_tool, doc_tool, verify_answer
 
 config = Config()
 
@@ -37,17 +37,19 @@ def query_classifier(state: State):
     print("docs received from Qdrant")
     print(context)
 
-    llm_with_structured_output = llm.with_structured_output(RouteIdentifier)
     classify_prompt = PromptTemplate(
         template=config.prompt("classify_prompt"),
         input_variables=["question", "context"]
     )
-    chain = classify_prompt | llm_with_structured_output
+    structured_llm = llm.with_structured_output(RouteIdentifier)
+    chain = classify_prompt | structured_llm
     result = chain.invoke({"question": question, "context": context})
-    print("result received is in query classifier")
-    print(result.route)
+    route_text = result.route
 
-    return {"messages": state["messages"], "route": result.route, "latest_query": question}
+    print("result received is in query classifier")
+    print(route_text)
+
+    return {"messages": state["messages"], "route": route_text, "latest_query": question}
 
 
 def general_llm(state: State):
@@ -77,7 +79,12 @@ def retriever_node(state: State):
         dict: Updated messages with tool calls.
     """
     messages = state["latest_query"]
-    result = agent_executor.invoke({"input": messages})
+    try:
+        result = agent_executor.invoke({"input": messages})
+    except Exception as e:
+        print(f"Agent execution failed: {e}")
+        # Raise the exception to prevent silent failures and hallucination loops
+        raise e
 
     # Extract tool calls
     intermediate_steps = result.get("intermediate_steps", [])
@@ -189,7 +196,7 @@ def web_search(state: State):
     result = search_tool.invoke(state["latest_query"])
 
     contents = [item["content"] for item in result if "content" in item]
-    print(contents)
+    # print(contents)  # Removed to prevent UnicodeEncodeError on Windows
 
     return {
         "messages": [{"role": "assistant", "content": "\n\n".join(contents)}]
@@ -213,7 +220,7 @@ graph.add_edge("retriever", "grade")
 graph.add_edge("rewrite", "retriever")
 graph.add_conditional_edges("query_analysis", routing_tool)
 graph.add_conditional_edges("grade", doc_tool)
-graph.add_edge("generate", END)
+graph.add_conditional_edges("generate", verify_answer)
 graph.add_edge("general_llm", END)
 
 builder = graph.compile()

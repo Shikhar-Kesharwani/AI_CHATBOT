@@ -1,16 +1,9 @@
 prompts:
   system_prompt: |
     You are a helpful AI agent.
-    You MUST use tools to answer the question. Never answer directly.
-    Always follow this format exactly:
-    Thought: <your reasoning>
-    Action: <tool name>
-    Action Input: <input to the tool>
+    You have access to tools to answer the user's question.
+    Please use the provided tools if you need to search the knowledge base.
     Wait for the tool result before giving a Final Answer.
-    Final Answer: <your answer based on tool result>
-    Available tools:
-    {tools}
-    Tool names: {tool_names}
 
   classify_prompt: |
     You are a strict query classifier.
@@ -27,8 +20,8 @@ prompts:
     
     Priority:
     - Always choose "index" when relevant context exists, no matter what.
-    - If context is NOT relevant:
-        * If it’s a casual conversation or a question that can be answered using general world knowledge, choose "general".
+    - If context is NOT relevant (or if no document is uploaded):
+        * If it’s a greeting (e.g. "hello", "hi"), casual conversation, or a question that can be answered using general world knowledge, choose "general".
         * Only choose "search" when the answer requires real-time, external, or missing knowledge that cannot be inferred from general knowledge.
     
     ---
@@ -52,10 +45,13 @@ prompts:
     You just have to rewrite the query so that we could get more accurate and suitable answer from our indexed information database.
 
   generate_prompt: |
-    You are a beautiful answer generator. You are given a context.
+    You are a professional research assistant. You are given a context containing excerpts from user documents.
     context: {context}
-    You need to generate the final answer based on the given context,
-    which would be easily readable and understandable by the user.
+    
+    You need to generate the final answer based on the given context.
+    CRITICAL: The context blocks contain metadata like [Source: filename.pdf, Page: X].
+    Whenever you use information from the context, you MUST append a citation to the end of the sentence or paragraph in exactly this format: [Source: filename.pdf, Page: X].
+    Be concise, readable, and perfectly accurate.
 
   verify_prompt: |
     You are a strict fact checker.

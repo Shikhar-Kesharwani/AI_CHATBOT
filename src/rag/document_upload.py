@@ -11,6 +11,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.rag.retriever_setup import retriever_chain
 from src.tools.common_tools import enhance_description_with_llm
+from src.memory.chathistory_sqlite import DocumentManager
 
 
 def documents(description: str, file: UploadFile = File(...)):
@@ -67,13 +68,16 @@ def documents(description: str, file: UploadFile = File(...)):
     # Enhance description using LLM
     description_llm = enhance_description_with_llm(description)
 
-    # Save enhanced description
-    with open("description.txt", "w", encoding="utf-8") as f:
-        f.write(description_llm)
+    # Save enhanced description to SQLite
+    DocumentManager.add_document(filename, description_llm)
 
-    with open("description.txt", "r", encoding="utf-8") as f:
-        print("Document description from storage:")
-        print(f.read())
+    print(f"Document {filename} added to SQLite with description: {description_llm}")
+
+    import re
+    # Normalize text to remove excessive whitespace and clean up PDF extractions
+    for doc in docs:
+        if doc.page_content:
+            doc.page_content = re.sub(r'\s+', ' ', doc.page_content).strip()
 
     # Split documents into chunks
     splitter = RecursiveCharacterTextSplitter(
@@ -81,6 +85,22 @@ def documents(description: str, file: UploadFile = File(...)):
         chunk_overlap=150
     )
     chunks = splitter.split_documents(docs)
+    
+    if not chunks:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="No readable text found in the document. Is it a scanned PDF?"
+        )
+    
+    # Add filename and ensure page metadata exists for all chunks
+    for chunk in chunks:
+        chunk.metadata["filename"] = filename
+        if "page" not in chunk.metadata:
+            chunk.metadata["page"] = 1 # TXT files or un-paginated PDFs default to 1
+        else:
+            # PyPDFLoader is 0-indexed, let's make it 1-indexed for humans
+            chunk.metadata["page"] += 1
 
     return retriever_chain(chunks)
 
