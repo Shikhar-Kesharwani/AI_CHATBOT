@@ -1,0 +1,35 @@
+# =============================================================================
+# MODEL 1 — CLOUD NATIVE: RENDER DEPLOYMENT CONFIG
+# Deploy to Render by connecting your GitHub repo at render.com/new
+# =============================================================================
+
+services:
+  # ─── FastAPI + Streamlit Application ──────────────────────────────────────
+  - type: web
+    name: adaptive-rag
+    env: docker
+    dockerfilePath: ./Dockerfile
+    # Render injects PORT automatically; supervisord reads it for Streamlit
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: API_URL
+        value: http://localhost:8000
+      - key: SQLITE_DB_PATH
+        value: /data/adaptive_rag.db
+      - key: FAISS_INDEX_DIR
+        value: /data/faiss_index_persistent
+      - key: ALLOWED_ORIGINS
+        value: https://adaptive-rag.onrender.com
+      - key: OPENAI_API_KEY
+        sync: false            # Set this manually in Render dashboard → Secret
+      - key: TAVILY_API_KEY
+        sync: false            # Set this manually in Render dashboard → Secret
+      - key: SENTRY_DSN
+        sync: false            # Optional — set if you want error monitoring
+    # Persistent disk keeps SQLite DB and FAISS index across restarts
+    disk:
+      name: rag-persistent-data
+      mountPath: /data
+      sizeGB: 1
+    healthCheckPath: /health

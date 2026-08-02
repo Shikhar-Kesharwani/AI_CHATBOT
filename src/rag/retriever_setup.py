@@ -15,7 +15,7 @@ from src.memory.chathistory_sqlite import DocumentManager
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-FAISS_INDEX_DIR = "faiss_index_persistent"
+FAISS_INDEX_DIR = os.environ.get("FAISS_INDEX_DIR", "faiss_index_persistent")
 
 # Global in-memory vectorstore and lock
 _global_vectorstore = None

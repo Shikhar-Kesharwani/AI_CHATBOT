@@ -1,0 +1,35 @@
+name: CI — Build & Health Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t adaptive-rag:ci .
+
+      - name: Start container
+        run: |
+          docker run -d \
+            --name rag_ci \
+            -p 8000:8000 \
+            -e PORT=7860 \
+            -e API_URL=http://localhost:8000 \
+            -e OPENAI_API_KEY=test_key \
+            -e TAVILY_API_KEY=test_key \
+            adaptive-rag:ci
+          sleep 25
+
+      - name: Health check FastAPI
+        run: curl -f http://localhost:8000/health || (docker logs rag_ci && exit 1)
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f rag_ci

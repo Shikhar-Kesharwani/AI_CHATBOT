@@ -14,3 +14,21 @@ app.log
 .streamlit/secrets.toml
 .DS_Store
 description.txt
+
+# Environment files
+.env.*
+!.env.example
+
+# Model weights and datasets (never commit large binary files)
+*.h5
+*.pkl
+*.pt
+*.pth
+*.onnx
+*.joblib
+data/
+datasets/
+Artifacts/
+
+# Docker secrets
+infra/docker/.env

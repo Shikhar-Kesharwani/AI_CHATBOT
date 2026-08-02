@@ -1,0 +1,32 @@
+name: Release — Auto Tag & Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Adaptive RAG Release ${{ github.ref_name }}
+
+            ### Deployment
+            - **Model 1 (Cloud):** See `infra/cloud/DEPLOYMENT_GUIDE.md`
+            - **Model 2 (Docker):** Run `docker-compose -f infra/docker/docker-compose.yml up -d`
+
+            ### Environment Variables
+            See `.env.example` for all required configuration.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,7 +10,9 @@ from typing import List, Dict
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 
-DB_PATH = Path("adaptive_rag.db")
+import os
+
+DB_PATH = Path(os.environ.get("SQLITE_DB_PATH", "adaptive_rag.db"))
 
 def init_db():
     """Initialize the SQLite database with required tables."""

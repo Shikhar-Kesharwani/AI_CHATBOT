@@ -9,7 +9,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-PYTHON_BASE_URL = "http://127.0.0.1:8000"
+PYTHON_BASE_URL = os.environ.get("API_URL", "http://127.0.0.1:8000")
 
 
 def get_documents_rag() -> list:

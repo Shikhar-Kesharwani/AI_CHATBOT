@@ -1,0 +1,26 @@
+name: Deploy — Trigger Render Deployment
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    needs: []   # Add 'test' or 'lint' here to gate deployment on passing checks
+    steps:
+      - name: Trigger Render Deploy Hook
+        # To activate: add RENDER_DEPLOY_HOOK_URL as a GitHub secret
+        # Get the URL from Render dashboard → Service → Settings → Deploy Hooks
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          echo "Render deployment triggered."
+
+      - name: Deployment summary
+        run: |
+          echo "============================="
+          echo " Deployment trigger complete"
+          echo " Model 1 (Render): https://adaptive-rag.onrender.com"
+          echo " Model 2 (Docker): docker-compose -f infra/docker/docker-compose.yml up -d"
+          echo "============================="
