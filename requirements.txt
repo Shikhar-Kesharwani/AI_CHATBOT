@@ -20,3 +20,4 @@ python-multipart
 sentry-sdk[fastapi]
 sentence-transformers
 langchain-huggingface
+fastembed
