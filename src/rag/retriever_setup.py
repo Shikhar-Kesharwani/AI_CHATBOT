@@ -9,20 +9,15 @@ from langchain_core.documents import Document
 from langchain_core.tools import create_retriever_tool
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document as LangChainDocument
+from langchain_community.embeddings import FastEmbedEmbeddings
 
 from src.memory.chathistory_sqlite import DocumentManager
 
 # ─────────────────────────────────────────────────────────────────────────────
-# EMBEDDINGS INIT (Low-memory ONNX FastEmbed preferred for 512MB RAM environments)
+# EMBEDDINGS INIT (Low-memory ONNX FastEmbed engine — ~40MB RAM, No PyTorch)
 # ─────────────────────────────────────────────────────────────────────────────
-try:
-    from langchain_community.embeddings import FastEmbedEmbeddings
-    embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
-    print("Initialized FastEmbedEmbeddings (Ultra-low RAM ONNX engine)")
-except Exception as e:
-    print(f"FastEmbed init failed, falling back to HuggingFaceEmbeddings: {e}")
-    from langchain_community.embeddings import HuggingFaceEmbeddings
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+print("Initialized FastEmbedEmbeddings (ONNX engine - 40MB RAM)")
 
 FAISS_INDEX_DIR = os.environ.get("FAISS_INDEX_DIR", "faiss_index_persistent")
 

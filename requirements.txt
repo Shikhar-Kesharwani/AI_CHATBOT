@@ -18,6 +18,4 @@ uvicorn[standard]
 streamlit
 python-multipart
 sentry-sdk[fastapi]
-sentence-transformers
-langchain-huggingface
 fastembed
