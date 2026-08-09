@@ -45,7 +45,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -59,7 +59,7 @@ _start_time = time.time()
 # ─────────────────────────────────────────────────────────────────────────────
 # ROOT
 # ─────────────────────────────────────────────────────────────────────────────
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     """Root endpoint to verify API is running."""
     return {"message": "Adaptive RAG API is running"}
@@ -67,9 +67,9 @@ async def root():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HEALTH CHECK ENDPOINTS
-# Required by Render, Docker Compose healthchecks, and CI/CD pipelines
+# Supports GET & HEAD methods for UptimeRobot, Render, Docker & CI probes
 # ─────────────────────────────────────────────────────────────────────────────
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     """Full health check — confirms API is running and responsive."""
     return {
@@ -79,13 +79,13 @@ async def health():
     }
 
 
-@app.get("/ready")
+@app.api_route("/ready", methods=["GET", "HEAD"])
 async def ready():
     """Readiness probe — used by orchestrators to route traffic."""
     return {"status": "ready"}
 
 
-@app.get("/live")
+@app.api_route("/live", methods=["GET", "HEAD"])
 async def live():
     """Liveness probe — used by orchestrators to detect crashes."""
     return {"status": "alive"}
