@@ -1,47 +1,29 @@
-FROM python:3.10-slim
+FROM python:3.10-slim AS builder
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SYSTEM DEPENDENCIES
-# Supervisord is used to run FastAPI + Streamlit in one container
-# ─────────────────────────────────────────────────────────────────────────────
+FROM python:3.10-slim AS production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# ─────────────────────────────────────────────────────────────────────────────
-# NON-ROOT USER
-# Required by Hugging Face Spaces and good practice for all platforms
-# ─────────────────────────────────────────────────────────────────────────────
 RUN useradd -m -u 1000 user
-USER user
 
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH
 
 WORKDIR $HOME/app
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DEPENDENCIES (installed before copying source for Docker layer caching)
-# ─────────────────────────────────────────────────────────────────────────────
-COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# ─────────────────────────────────────────────────────────────────────────────
-# APPLICATION CODE
-# ─────────────────────────────────────────────────────────────────────────────
+COPY --from=builder /root/.local /home/user/.local
 COPY --chown=user . .
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PORTS
-# 8000 = FastAPI backend (internal)
-# 7860 = Streamlit frontend (public — required by Hugging Face Spaces)
-# 8501 = Streamlit alternate (for Render / Docker Compose)
-# PORT env var is read by supervisord.conf for flexibility
-# ─────────────────────────────────────────────────────────────────────────────
+USER user
+
 EXPOSE 8000 7860 8501
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STARTUP
-# Supervisord launches both FastAPI and Streamlit simultaneously
-# ─────────────────────────────────────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
 CMD ["supervisord", "-c", "supervisord.conf"]
